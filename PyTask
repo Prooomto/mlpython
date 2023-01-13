@@ -1,0 +1,117 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.linear_model import LinearRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import confusion_matrix, classification_report, roc_curve, roc_auc_score
+
+df = pd.read_csv('diabetes.csv')
+
+print(df.head(5))
+print(df.shape)
+
+Q1 = df.quantile(0.25)
+Q3 = df.quantile(0.75)
+IQR = Q3 - Q1
+df = df[~((df < (Q1-1.5 * IQR)) |(df > (Q3 + 1.5 * IQR))).any(axis=1)]
+print(df.shape)
+
+X = df.iloc[:, :8]
+y = df.iloc[:, 8:]
+
+# Boxplpts (определяем разбросы, чтобы удалить)
+# fig, (ax1, ax2) = plt.subplots(2, 4)
+# ax1[0].boxplot(X['Pregnancies'], labels=['Pregnancies'])
+# ax1[1].boxplot(X['Glucose'], labels=['Glucose'])
+# ax1[2].boxplot(X['BloodPressure'], labels=['BloodPressure'])
+# ax1[3].boxplot(X['SkinThickness'], labels=['SkinThickness'])
+# ax2[0].boxplot(X['Insulin'], labels=['Insulin'])
+# ax2[1].boxplot(X['BMI'], labels=['BMI'])
+# ax2[2].boxplot(X['DiabetesPedigreeFunction'], labels=['DiabetesPedigreeFunction'])
+# ax2[3].boxplot(X['Age'], labels=['Age'])
+# plt.show()
+
+# Тепловые карты (смотрим зависимость категорий друг от друга)
+# plt.figure(figsize=(8,6))
+# c = df.corr()
+# sns.heatmap(c, cmap='BrBG', annot=True)
+# plt.show()
+
+# Scatter (при преобладании каких категорий, результат чаще всего положительный)
+# Наиболее значимыми оказались категории Glucose и BMI
+# sorted = df.sort_values('Outcome')
+# fig, (ax1, ax2) = plt.subplots(2, 4)
+# ax1[0].scatter(sorted['Pregnancies'], sorted['Outcome'], alpha=0.1)
+# ax1[1].scatter(sorted['Glucose'], sorted['Outcome'], alpha=0.1)
+# ax1[2].scatter(sorted['BloodPressure'], sorted['Outcome'], alpha=0.1)
+# ax1[3].scatter(sorted['SkinThickness'], sorted['Outcome'], alpha=0.1)
+# ax2[0].scatter(sorted['Insulin'], sorted['Outcome'], alpha=0.1)
+# ax2[1].scatter(sorted['BMI'], sorted['Outcome'], alpha=0.1)
+# ax2[2].scatter(sorted['DiabetesPedigreeFunction'], sorted['Outcome'], alpha=0.1)
+# ax2[3].scatter(sorted['Age'], sorted['Outcome'], alpha=0.1)
+# plt.show()
+
+# Scatter (для определения кореляции категорий)
+# Некоторая кореляция присутствует
+# plt.scatter(df['Glucose'], df['BMI'])
+# plt.xlabel('Glucose')
+# plt.ylabel('BMI')
+# plt.show()
+
+X = df[['Glucose', 'BMI']]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, shuffle=False)
+linear = LinearRegression()
+linear.fit(X_train, y_train)
+print('Linear regression score:', linear.score(X_test, y_test))
+
+knn = KNeighborsClassifier(n_neighbors=7)
+knn.fit(X_train, y_train.Outcome)
+print('KNN score:', knn.score(X_test, y_test))
+
+train_accuracy = []
+test_accuracy = []
+
+for i in range(1, 11):
+    knn = KNeighborsClassifier(n_neighbors=i)
+    knn.fit(X_train, y_train.Outcome)
+    
+    train_accuracy.append(knn.score(X_train, y_train))
+    test_accuracy.append(knn.score(X_test, y_test))
+
+# Plot of diferent k scores
+# plt.plot(range(1, 11), train_accuracy, label='Train score')
+# plt.plot(range(1, 11), test_accuracy, label='Test score')
+# plt.xticks(range(1, 11))
+# plt.legend()
+# plt.show()
+
+knn = KNeighborsClassifier(n_neighbors=7)
+knn.fit(X_train, y_train.Outcome)
+pred = knn.predict(X_test)
+
+confuse = confusion_matrix(y_test, pred)
+print(confuse)
+# crosstab = pd.crosstab(y_test.Outcome, pred, rownames=['Actual'], colnames=['Predicted'])
+# print(crosstab)
+print(classification_report(y_test, pred))
+
+y_pred_proba = knn.predict_proba(X_test)
+fpr, tpr, thresholds = roc_curve(y_test.Outcome, y_pred_proba[:, 1:])
+plt.plot(fpr, tpr)
+plt.title('ROC curve')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+print('Area under the Receiver Operating Characteristic curve:', roc_auc_score(y_test, y_pred_proba[:, 1:]))
+plt.show()
+
+param_grid = {'n_neighbors':np.arange(1,50)}
+knn_cv = GridSearchCV(knn, param_grid)
+knn_cv.fit(X, y.Outcome)
+
+print(knn_cv.best_score_)
+print(knn_cv.best_params_)
+
+# Accuracy = (true positive + true negative) / total
+# (155 + 37) / 256 = 192 / 256 = 0.75
